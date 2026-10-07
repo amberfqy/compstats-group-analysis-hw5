@@ -4,3 +4,60 @@ format: html
 name: "Amber Feng, Fred Wang"
 ---
 
+### Question: Does the a large monetary penalty of a legal case indicate a use of AI tool?
+
+(0) Data Wrangling
+```{r}
+library(tidyverse)
+library(dplyr)
+df <- read_csv("hallucination_cases.csv") |>
+  select(`AI Tool`, `Monetary Penalty`, `Professional Sanction`, `Alleged`, `Vendor Disputed`) |>
+  mutate(across(c(`Professional Sanction`, `Alleged`, `Vendor Disputed`),as.factor),
+         Monetary_Penalty_num = parse_number(`Monetary Penalty`), 
+         Binary_AI_Tool = case_when(str_to_lower(`AI Tool`) == "unidentified" ~ 0, !is.na(`AI Tool`) ~ 1,
+      TRUE ~ NA_real_
+    )
+  ) |> drop_na(
+    Monetary_Penalty_num,
+    Binary_AI_Tool,
+    `Professional Sanction`,
+    Alleged,
+    `Vendor Disputed`
+  )|>
+  select(
+    Monetary_Penalty_num,
+    Binary_AI_Tool,
+    `Professional Sanction`,
+    Alleged,
+    `Vendor Disputed`
+  )
+
+head(df)
+
+```
+
+(1) Visualization
+```{r}
+df1 <- df |>
+  mutate(Binary_AI_Tool = factor(Binary_AI_Tool, levels = c(0, 1), labels = c("Unidentified AI Tool", "Identified AI Tool")))
+
+ggplot(data = df1, aes(x = Binary_AI_Tool, fill = `Professional Sanction`)) +
+  geom_bar(position = "fill") +
+  labs(
+    x = "AI Tool Identification",
+    y = "Proportion of Cases",
+    fill = "Professional Sanction",
+    title = "Professional Sanctions by AI Tool Identification")
+```
+Based on this visualization, we see that for cases with identified AI tool, the proportion of professional sanction is higher than those with unidentified AI tool. This might indicate a stricter legal restriction on AI tool in cases. However, since the statistical significance test is not run between these two variables, we can not claim this conclusion with confidence.
+
+(2) Decision Tree
+```{r}
+#| fig-width: 2.5
+#| fig-height: 2.5
+library(rpart)
+library(rpart.plot)
+tree_fit <- rpart(Binary_AI_Tool ~., data = df, method = "class", parms = list(split = "gini"))
+rpart.plot(tree_fit)
+```
+The classification tree examines how monetary penalties and other case variabless indicate whether an AI tool is identified/implied(1) or unidentified(0) in the case. At the root node, approximately 65% of observations are classified as 1. The first split occurs at a monetary penalty of 11,000, suggesting that penalty size is an important predictor of AI tool classification. With penalties of at least 11,000, approximately 81% are classified as 1. The tree then makes additional splits based on monetary penalty amounts, revealing variation across different penalty ranges. For example, cases with penalties between approximately 7,713 and 11,000 have a 41% proportion classified as 1. Interestingly, all splits involve monetary penalties, and none of other variables come up, indicating that the model did not select Professional Sanction, Alleged, or Vendor Disputed as splitting variables. However, these patterns demonstrate associations rather than causal relationships, and the smaller terminal nodes may reflect overfitting.
