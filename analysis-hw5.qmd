@@ -61,3 +61,47 @@ tree_fit <- rpart(Binary_AI_Tool ~., data = df, method = "class", parms = list(s
 rpart.plot(tree_fit)
 ```
 The classification tree examines how monetary penalties and other case variabless indicate whether an AI tool is identified/implied(1) or unidentified(0) in the case. At the root node, approximately 65% of observations are classified as 1. The first split occurs at a monetary penalty of 11,000, suggesting that penalty size is an important predictor of AI tool classification. With penalties of at least 11,000, approximately 81% are classified as 1. The tree then makes additional splits based on monetary penalty amounts, revealing variation across different penalty ranges. For example, cases with penalties between approximately 7,713 and 11,000 have a 41% proportion classified as 1. Interestingly, all splits involve monetary penalties, and none of other variables come up, indicating that the model did not select Professional Sanction, Alleged, or Vendor Disputed as splitting variables. However, these patterns demonstrate associations rather than causal relationships, and the smaller terminal nodes may reflect overfitting.
+
+(3) Random Forest
+
+```{r}
+library(randomForest)
+
+df_rf <- df |>
+  mutate(Binary_AI_Tool = as.factor(Binary_AI_Tool)) |>
+  rename(Professional_Sanction = `Professional Sanction`,
+         Vendor_Disputed = `Vendor Disputed`)
+
+set.seed(154)
+train_id <- sample(1:nrow(df_rf), round(0.8 * nrow(df_rf)))
+ai_train <- df_rf[train_id, ]
+ai_test <- df_rf[-train_id, ]
+
+set.seed(154)
+rf_ai <- randomForest(Binary_AI_Tool ~ ., data = ai_train,
+                      ntree = 500, importance = TRUE)
+rf_ai
+importance(rf_ai)
+
+rf_pred <- predict(rf_ai, newdata = ai_test)
+table(Predicted = rf_pred, Actual = ai_test$Binary_AI_Tool)
+```
+
+The random forest has an OOB error rate of $33.9\%$. It predicts every test case as $1$, so it never predicts an unidentified AI tool. Monetary penalty is the most important variable.
+
+(4) Model Comparison
+
+```{r}
+tree_train <- rpart(Binary_AI_Tool ~ ., data = ai_train,
+                    method = "class", parms = list(split = "gini"))
+tree_pred <- predict(tree_train, newdata = ai_test, type = "class")
+
+mean(tree_pred != ai_test$Binary_AI_Tool)
+mean(rf_pred != ai_test$Binary_AI_Tool)
+```
+
+We fit the decision tree on the same training data so we can compare test errors. The test misclassification error is $0.467$ for the decision tree and $0.413$ for the random forest. The random forest does slightly better, but it only predicts $1$, which is the most common class in the test set.
+
+(5) Conclusions
+
+Both models use monetary penalty as the most important variable, but neither model predicts well. So a large monetary penalty does not clearly tell us whether an AI tool is identified. Some limitations are that penalties may be in different currencies, many cases have no penalty, and `Alleged` and `Vendor Disputed` are almost always "No".
